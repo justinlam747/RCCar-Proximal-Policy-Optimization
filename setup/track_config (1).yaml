@@ -1,0 +1,47 @@
+track:
+    inner_radius: 2.5
+    outer_radius: 3.25
+    num_segments: 100
+    line_radius: 0.0125
+    line_height: 0.0025
+    seed: 1
+    radius_jitter: 1.6
+    num_features: 9
+    straight_feature_ratio: 0.45
+    feature_width_range: [0.25, 0.6]
+    angle_warp_strength: 0.35
+    angle_warp_harmonics: 3
+    high_freq_scale: 0.3
+    num_chicanes: 3
+    chicane_spacing: [0.08, 0.16]
+    oval_ratio: 1.4
+    oval_rotation: 0.0
+
+camera:
+    resolution:
+        width: 960
+        height: 720
+    fov: 90
+    near_plane: 0.025
+    far_plane: 25.0
+    position_offset:
+        x: 0.125
+        y: 0.0
+        z: 0.15
+    pitch: -50
+    bird_eye_transform:
+        # Inverse perspective mapping parameters
+        # Pixels per meter in bird's-eye view
+        pixels_per_meter: 100.0        # Scale for bird's-eye output
+
+
+physics:
+    time_step: 0.03333333333333333
+    gravity: 0.0  # Disabled for simplified physics
+    car:
+        max_linear_velocity: 2.0   # m/s forward/backward
+        max_angular_velocity: 2.0  # rad/s yaw rotation
+
+spawn:
+    position: [0.0, 2.75, 0.0675]
+    orientation: [0, 0, 0, 1]
