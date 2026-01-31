@@ -41,7 +41,7 @@ class SelfDrivingCarEnv(gym.Env):
         self,
         config_path: str = "setup/track_config (1).yaml",
         render_mode: Optional[str] = None,
-        max_episode_steps: int = 1000,
+        max_episode_steps: int = 3000,
     ):
         super().__init__()
         self.config_path = config_path
@@ -156,7 +156,7 @@ class SelfDrivingCarEnv(gym.Env):
         return np.clip(obs, self.observation_space.low, self.observation_space.high)
 
     def _compute_reward(self, action):
-        """Reward: survival + velocity - off track penalty."""
+        """Reward: survival focused, reduced speed incentive."""
         car_pos, car_orn = p.getBasePositionAndOrientation(self.car_id, physicsClientId=self.physics_client)
         car_vel, _ = p.getBaseVelocity(self.car_id, physicsClientId=self.physics_client)
 
@@ -164,11 +164,19 @@ class SelfDrivingCarEnv(gym.Env):
         on_track = self.track.inner_radius < dist_from_center < self.track.outer_radius
 
         if not on_track:
-            return -50.0
+            return -100.0
 
-        reward = 0.5  # survival bonus
+        reward = 1.0  # survival bonus (priority 1)
+
+        # centering bonus
+        dist_to_center = abs(dist_from_center - self.track_center_radius)
+        half_width = (self.track.outer_radius - self.track.inner_radius) / 2
+        centering = max(0, 1.0 - dist_to_center / half_width)
+        reward += centering * 0.5
+
+        # small velocity reward
         speed = np.sqrt(car_vel[0]**2 + car_vel[1]**2)
-        reward += speed * 1.0  # velocity reward
+        reward += speed * 0.1
 
         return reward
 
