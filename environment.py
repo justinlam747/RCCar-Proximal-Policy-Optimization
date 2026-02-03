@@ -174,9 +174,13 @@ class SelfDrivingCarEnv(gym.Env):
         centering = max(0, 1.0 - dist_to_center / half_width)
         reward += centering * 0.5
 
-        # small velocity reward
+        # velocity reward (increased)
         speed = np.sqrt(car_vel[0]**2 + car_vel[1]**2)
-        reward += speed * 0.1
+        reward += speed * 0.2
+
+        # wiggle penalty - must maintain minimum speed
+        if speed < 0.5:
+            reward -= 0.3
 
         return reward
 
