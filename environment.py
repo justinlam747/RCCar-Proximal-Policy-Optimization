@@ -125,6 +125,8 @@ class SelfDrivingCarEnv(gym.Env):
 
         # Episode tracking
         self.last_position = np.array([spawn_x, spawn_y])
+        self.last_angle = 0.0
+        self.total_progress = 0.0
         self.episode_reward = 0.0
 
     def _get_car_heading(self, car_orn):
@@ -155,8 +157,12 @@ class SelfDrivingCarEnv(gym.Env):
         ], dtype=np.float32)
         return np.clip(obs, self.observation_space.low, self.observation_space.high)
 
+    def _get_progress_angle(self, car_pos):
+        """Get angle from track center to car, used for lap progress."""
+        return np.arctan2(car_pos[1], car_pos[0])
+
     def _compute_reward(self, action):
-        """Reward: survival focused, reduced speed incentive."""
+        """Reward: angle-based progress."""
         car_pos, car_orn = p.getBasePositionAndOrientation(self.car_id, physicsClientId=self.physics_client)
         car_vel, _ = p.getBaseVelocity(self.car_id, physicsClientId=self.physics_client)
 
@@ -166,21 +172,19 @@ class SelfDrivingCarEnv(gym.Env):
         if not on_track:
             return -100.0
 
-        reward = 1.0  # survival bonus (priority 1)
+        reward = 1.0  # survival
 
-        # centering bonus
-        dist_to_center = abs(dist_from_center - self.track_center_radius)
-        half_width = (self.track.outer_radius - self.track.inner_radius) / 2
-        centering = max(0, 1.0 - dist_to_center / half_width)
-        reward += centering * 0.5
+        # progress reward based on angle change
+        current_angle = self._get_progress_angle(car_pos)
+        delta_angle = current_angle - self.last_angle
+        if delta_angle > np.pi:
+            delta_angle -= 2.0 * np.pi
+        if delta_angle < -np.pi:
+            delta_angle += 2.0 * np.pi
 
-        # velocity reward (increased)
-        speed = np.sqrt(car_vel[0]**2 + car_vel[1]**2)
-        reward += speed * 0.2
-
-        # wiggle penalty - must maintain minimum speed
-        if speed < 0.5:
-            reward -= 0.3
+        reward += delta_angle * 10.0
+        self.last_angle = current_angle
+        self.total_progress += delta_angle
 
         return reward
 
@@ -208,6 +212,8 @@ class SelfDrivingCarEnv(gym.Env):
         p.resetBaseVelocity(self.car_id, [0, 0, 0], [0, 0, 0], physicsClientId=self.physics_client)
 
         self.last_position = np.array(self.spawn_pos[:2])
+        self.last_angle = np.arctan2(self.spawn_pos[1], self.spawn_pos[0])
+        self.total_progress = 0.0
         self.episode_reward = 0.0
 
         obs = self._get_observation()
