@@ -19,3 +19,9 @@
 ## iteration 5: research based
 - time penalty: -0.1, progress: +1.0 max (clipped), off track: -100, lap bonus: +100
 - based on carracing env and papers
+
+## iteration 5 results
+- car spiraled into the wall after 97 steps
+- mean reward -111
+- angle from origin rewards turning inward, not following track
+- spiraling changes angle in the rewarded direction
