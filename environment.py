@@ -172,24 +172,24 @@ class SelfDrivingCarEnv(gym.Env):
         if not on_track:
             return -100.0
 
-        reward = -0.1  # time penalty
+        reward = 0.5  # survival
+        reward -= 0.1  # time penalty
 
-        # progress reward
-        current_angle = self._get_progress_angle(car_pos)
-        delta_angle = current_angle - self.last_angle
-        if delta_angle > np.pi:
-            delta_angle -= 2.0 * np.pi
-        if delta_angle < -np.pi:
-            delta_angle += 2.0 * np.pi
+        # velocity along track tangent
+        rot = np.array(p.getMatrixFromQuaternion(car_orn)).reshape(3, 3)
+        car_fwd = rot[:, 0]
+        fwd_vel = car_vel[0] * car_fwd[0] + car_vel[1] * car_fwd[1]
 
-        progress = np.clip(delta_angle * 20.0, -1.0, 1.0)
-        reward += progress
-        self.last_angle = current_angle
-        self.total_progress += delta_angle
+        # track tangent at car position
+        angle = np.arctan2(car_pos[1], car_pos[0])
+        tangent = np.array([-np.sin(angle), np.cos(angle)])
+        vel_2d = np.array([car_vel[0], car_vel[1]])
+        tangent_vel = np.dot(vel_2d, tangent)
 
-        # lap completion bonus
-        if self.total_progress >= 2 * np.pi:
-            reward += 100.0
+        reward += np.clip(tangent_vel / self.max_linear_velocity, -1.0, 1.0)
+
+        self.last_angle = angle
+        self.total_progress += 0  # placeholder
 
         return reward
 

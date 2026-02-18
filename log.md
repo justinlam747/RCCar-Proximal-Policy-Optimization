@@ -25,3 +25,8 @@
 - mean reward -111
 - angle from origin rewards turning inward, not following track
 - spiraling changes angle in the rewarded direction
+
+## iteration 6: track tangent velocity
+- removed angle progress, reward velocity along track tangent
+- survival +0.5, time -0.1, tangent velocity up to +1.0, off track -100
+- car oversteered, hugged walls, crashed partway through
