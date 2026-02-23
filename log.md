@@ -30,3 +30,8 @@
 - removed angle progress, reward velocity along track tangent
 - survival +0.5, time -0.1, tangent velocity up to +1.0, off track -100
 - car oversteered, hugged walls, crashed partway through
+
+## iteration 7: priority based reward
+- survival +1.0, centering +0.3, speed +0.2, steering -0.2
+- removed time penalty
+- getting better but car still wiggles sometimes
