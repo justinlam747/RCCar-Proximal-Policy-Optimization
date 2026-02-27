@@ -166,19 +166,16 @@ class SelfDrivingCarEnv(gym.Env):
         car_pos, car_orn = p.getBasePositionAndOrientation(self.car_id, physicsClientId=self.physics_client)
         car_vel, _ = p.getBaseVelocity(self.car_id, physicsClientId=self.physics_client)
 
-        dist_from_center = np.sqrt(car_pos[0]**2 + car_pos[1]**2)
-        on_track = self.track.inner_radius < dist_from_center < self.track.outer_radius
-
-        if not on_track:
+        if not self._is_on_track(car_pos):
             return -100.0
 
         reward = 1.0  # survival (priority 1)
 
         # centering bonus
-        dist_from_center = np.sqrt(car_pos[0]**2 + car_pos[1]**2)
-        dist_to_center = abs(dist_from_center - self.track_center_radius)
-        half_width = (self.track.outer_radius - self.track.inner_radius) / 2
-        centering = max(0, 1.0 - dist_to_center / half_width)
+        dist_inner, dist_outer, _ = self._get_distances_to_track(car_pos)
+        min_edge = min(dist_inner, dist_outer)
+        half_width = self.track.track_width / 2.0
+        centering = np.clip(min_edge / half_width, 0.0, 1.0)
         reward += centering * 0.3
 
         # forward speed bonus
@@ -196,11 +193,56 @@ class SelfDrivingCarEnv(gym.Env):
 
         return reward
 
+    def _point_in_polygon(self, point, polygon):
+        """Ray-casting point-in-polygon test."""
+        x, y = point[0], point[1]
+        n = len(polygon)
+        inside = False
+        j = n - 1
+        for i in range(n):
+            xi, yi = polygon[i][0], polygon[i][1]
+            xj, yj = polygon[j][0], polygon[j][1]
+            if (yi > y) != (yj > y):
+                x_int = (xj - xi) * (y - yi) / (yj - yi) + xi
+                if x < x_int:
+                    inside = not inside
+            j = i
+        return inside
+
+    def _is_on_track(self, car_pos):
+        """
+        Check if car is on the drivable surface using polygon test.
+
+        Note: track.inner_points is the outer boundary and
+        track.outer_points is the inner boundary (naming is swapped
+        due to offset normal direction in Track class).
+        """
+        pos_2d = np.array([car_pos[0], car_pos[1]])
+        inside_outer = self._point_in_polygon(pos_2d, self.track.inner_points[:, :2])
+        inside_inner = self._point_in_polygon(pos_2d, self.track.outer_points[:, :2])
+        return inside_outer and not inside_inner
+
+    def _get_distances_to_track(self, car_pos):
+        """Return (dist_inner, dist_outer, closest_idx)."""
+        pos_2d = np.array([car_pos[0], car_pos[1]])
+
+        inner_pts = self.track.inner_points[:, :2]
+        inner_diffs = inner_pts - pos_2d
+        inner_dists = np.sqrt(np.sum(inner_diffs ** 2, axis=1))
+        closest_idx = int(np.argmin(inner_dists))
+        dist_inner = inner_dists[closest_idx]
+
+        outer_pts = self.track.outer_points[:, :2]
+        outer_diffs = outer_pts - pos_2d
+        outer_dists = np.sqrt(np.sum(outer_diffs ** 2, axis=1))
+        dist_outer = float(np.min(outer_dists))
+
+        return dist_inner, dist_outer, closest_idx
+
     def _is_terminated(self):
         """End episode if car is off track or flipped."""
         car_pos, car_orn = p.getBasePositionAndOrientation(self.car_id, physicsClientId=self.physics_client)
-        dist = np.sqrt(car_pos[0]**2 + car_pos[1]**2)
-        if dist < self.track.inner_radius or dist > self.track.outer_radius:
+        if not self._is_on_track(car_pos):
             return True
         roll, pitch, _ = p.getEulerFromQuaternion(car_orn)
         if abs(roll) > 1.0 or abs(pitch) > 1.0:
@@ -268,6 +310,7 @@ class SelfDrivingCarEnv(gym.Env):
             "step": self.current_step,
             "episode_reward": self.episode_reward,
             "car_position": new_pos,
+            "is_on_track": self._is_on_track(new_pos),
         }
         return obs, reward, terminated, truncated, info
 
