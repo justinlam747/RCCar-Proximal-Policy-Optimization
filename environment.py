@@ -116,12 +116,15 @@ class SelfDrivingCarEnv(gym.Env):
             high=np.array([1.0, 1.0], dtype=np.float32),
         )
 
-        # Observation space: [car_x, car_y, heading_cos, heading_sin,
-        #                     forward_vel, angular_vel, dist_inner, dist_outer,
-        #                     dist_center, progress_angle]
-        obs_low = np.full(10, -5.0, dtype=np.float32)
-        obs_high = np.full(10, 5.0, dtype=np.float32)
+        # Observation: IMU (4) + LiDAR (9) = 13
+        obs_low = np.array([-1.0, -1.0, -1.0, -1.0] + [0.0] * 9, dtype=np.float32)
+        obs_high = np.array([1.0, 1.0, 1.0, 1.0] + [1.0] * 9, dtype=np.float32)
         self.observation_space = spaces.Box(low=obs_low, high=obs_high, dtype=np.float32)
+
+        # LiDAR config
+        self.LIDAR_ANGLES_DEG = [-90, -67.5, -45, -22.5, 0, 22.5, 45, 67.5, 90]
+        self.LIDAR_MAX_RANGE = 5.0
+        self.LIDAR_NUM_RAYS = 9
 
         # Episode tracking
         self.last_position = np.array([spawn_x, spawn_y])
@@ -134,28 +137,56 @@ class SelfDrivingCarEnv(gym.Env):
         return p.getEulerFromQuaternion(car_orn)[2]
 
     def _get_observation(self):
-        """Get position-based observation vector (10-dim)."""
+        """Build 13-D sensor observation: IMU (4) + LiDAR (9)."""
         car_pos, car_orn = p.getBasePositionAndOrientation(self.car_id, physicsClientId=self.physics_client)
         car_vel, car_ang_vel = p.getBaseVelocity(self.car_id, physicsClientId=self.physics_client)
         heading = self._get_car_heading(car_orn)
 
-        dist_from_center = np.sqrt(car_pos[0]**2 + car_pos[1]**2)
-        dist_inner = dist_from_center - self.track.inner_radius
-        dist_outer = self.track.outer_radius - dist_from_center
-        progress = np.arctan2(car_pos[1], car_pos[0])
+        rot = np.array(p.getMatrixFromQuaternion(car_orn)).reshape(3, 3)
+        car_forward = rot[:, 0]
+        forward_vel = car_vel[0] * car_forward[0] + car_vel[1] * car_forward[1]
+        angular_vel = car_ang_vel[2]
 
-        forward_vel = np.sqrt(car_vel[0]**2 + car_vel[1]**2)
+        norm_fwd = np.clip(forward_vel / self.max_linear_velocity, -1.0, 1.0)
+        norm_ang = np.clip(angular_vel / self.max_angular_velocity, -1.0, 1.0)
 
-        obs = np.array([
-            car_pos[0], car_pos[1],
-            np.cos(heading), np.sin(heading),
-            forward_vel / self.max_linear_velocity,
-            car_ang_vel[2] / self.max_angular_velocity,
-            dist_inner, dist_outer,
-            dist_from_center - self.track_center_radius,
-            progress,
-        ], dtype=np.float32)
-        return np.clip(obs, self.observation_space.low, self.observation_space.high)
+        lidar = self._cast_lidar_rays(np.array([car_pos[0], car_pos[1]]), heading)
+
+        obs = np.concatenate([
+            np.array([np.cos(heading), np.sin(heading), norm_fwd, norm_ang], dtype=np.float32),
+            lidar,
+        ])
+        return obs
+
+    def _ray_segment_intersection(self, ray_origin, ray_dir, seg_a, seg_b):
+        """2D ray-segment intersection. Returns distance or None."""
+        seg_d = seg_b - seg_a
+        cross = ray_dir[0] * seg_d[1] - ray_dir[1] * seg_d[0]
+        if abs(cross) < 1e-10:
+            return None
+        diff = seg_a - ray_origin
+        t = (diff[0] * seg_d[1] - diff[1] * seg_d[0]) / cross
+        s = (diff[0] * ray_dir[1] - diff[1] * ray_dir[0]) / cross
+        if t > 0.01 and 0 <= s <= 1:
+            return t
+        return None
+
+    def _cast_lidar_rays(self, car_pos_2d, heading):
+        """Cast 9 LiDAR rays and return normalized distances [0, 1]."""
+        distances = np.ones(self.LIDAR_NUM_RAYS, dtype=np.float32)
+        for i in range(self.LIDAR_NUM_RAYS):
+            ray_angle = heading + np.radians(self.LIDAR_ANGLES_DEG[i])
+            ray_dir = np.array([np.cos(ray_angle), np.sin(ray_angle)])
+            min_t = self.LIDAR_MAX_RANGE
+            for boundary in [self.track.inner_points[:, :2], self.track.outer_points[:, :2]]:
+                n = len(boundary)
+                for j in range(n):
+                    k = (j + 1) % n
+                    t = self._ray_segment_intersection(car_pos_2d, ray_dir, boundary[j], boundary[k])
+                    if t is not None and t < min_t:
+                        min_t = t
+            distances[i] = min(min_t / self.LIDAR_MAX_RANGE, 1.0)
+        return distances
 
     def _get_progress_angle(self, car_pos):
         """Get angle from track center to car, used for lap progress."""
