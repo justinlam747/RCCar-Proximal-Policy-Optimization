@@ -200,25 +200,28 @@ class SelfDrivingCarEnv(gym.Env):
         if not self._is_on_track(car_pos):
             return -100.0
 
-        reward = 1.0  # survival (priority 1)
+        reward = 0.3  # survival
 
-        # centering bonus
+        # forward velocity (primary)
+        rot = np.array(p.getMatrixFromQuaternion(car_orn)).reshape(3, 3)
+        car_fwd = rot[:, 0]
+        fwd_vel = car_vel[0] * car_fwd[0] + car_vel[1] * car_fwd[1]
+        reward += np.clip(fwd_vel / self.max_linear_velocity, 0.0, 1.0) * 0.5
+
+        # minimum speed penalty (anti-wiggle)
+        speed = np.sqrt(car_vel[0]**2 + car_vel[1]**2)
+        if speed < 0.3:
+            reward -= 0.5
+
+        # centering
         dist_inner, dist_outer, _ = self._get_distances_to_track(car_pos)
         min_edge = min(dist_inner, dist_outer)
         half_width = self.track.track_width / 2.0
         centering = np.clip(min_edge / half_width, 0.0, 1.0)
-        reward += centering * 0.3
+        reward += centering * 0.2
 
-        # forward speed bonus
-        rot = np.array(p.getMatrixFromQuaternion(car_orn)).reshape(3, 3)
-        car_fwd = rot[:, 0]
-        fwd_vel = car_vel[0] * car_fwd[0] + car_vel[1] * car_fwd[1]
-        speed_bonus = np.clip(fwd_vel / self.max_linear_velocity, 0.0, 1.0) * 0.2
-        reward += speed_bonus
-
-        # steering penalty
-        steering = abs(float(action[1]))
-        reward -= steering * 0.2
+        # steering penalty (reduced)
+        reward -= abs(float(action[1])) * 0.1
 
         self.last_angle = np.arctan2(car_pos[1], car_pos[0])
 

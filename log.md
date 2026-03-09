@@ -35,3 +35,8 @@
 - survival +1.0, centering +0.3, speed +0.2, steering -0.2
 - removed time penalty
 - getting better but car still wiggles sometimes
+
+## iteration 8: anti-wiggle with minimum speed
+- forward velocity +0.5 max (primary), min speed penalty -0.5
+- survival reduced to +0.3, centering +0.2, steering -0.1
+- reduced training to 50k steps for faster iteration

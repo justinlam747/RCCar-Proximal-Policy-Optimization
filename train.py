@@ -38,7 +38,7 @@ def load_config(config_path="setup/track_config (1).yaml"):
         "ent_coef": 0.0,
         "vf_coef": 0.5,
         "max_grad_norm": 0.5,
-        "total_timesteps": 100_000,
+        "total_timesteps": 50_000,
         "eval_freq": 10_000,
         "n_eval_episodes": 5,
         "checkpoint_freq": 25_000,
