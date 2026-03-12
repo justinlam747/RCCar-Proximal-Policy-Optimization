@@ -40,3 +40,9 @@
 - forward velocity +0.5 max (primary), min speed penalty -0.5
 - survival reduced to +0.3, centering +0.2, steering -0.1
 - reduced training to 50k steps for faster iteration
+
+## final reward: angular progress + centering
+- simplified to delta_angle * 50.0 + centering * 0.1
+- off track: -10 (episode ends anyway)
+- angular progress inherently requires forward movement
+- this is much cleaner and actually works
