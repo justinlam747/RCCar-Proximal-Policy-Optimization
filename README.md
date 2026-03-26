@@ -1,109 +1,124 @@
-# SB3 PPO Self-Driving Car Template
+# RC Car Proximal Policy Optimization
 
-This is a template project for implementing a Proximal Policy Optimization (PPO) agent using Stable-Baselines3 (SB3) for a self-driving car environment. The skeleton code is provided, and students can fill in the implementation details and experiment with hyperparameters.
+A reinforcement learning project that trains a self-driving RC car using Proximal Policy Optimization (PPO) in a PyBullet simulation. The car learns to navigate a procedurally generated racetrack using only onboard sensor data (IMU and LiDAR).
 
-## Setup Instructions
+## Overview
 
-### 1. Create a Virtual Environment
+The agent receives a 13-dimensional observation vector from simulated sensors and outputs continuous throttle and steering commands. Training uses Stable-Baselines3's PPO implementation with periodic evaluation and model checkpointing.
 
-**On Windows:**
-```bash
-python -m venv venv
-venv\Scripts\activate
+**Sensor inputs:**
+- IMU: heading (cos/sin), forward velocity, angular velocity
+- LiDAR: 9 distance rays spanning the front 180 degrees
+
+**Action outputs:**
+- Throttle: continuous [-1, 1] (backward to forward)
+- Steering: continuous [-1, 1] (left to right)
+
+## Project Structure
+
+```
+.
+├── environment.py          # Custom Gymnasium environment (PyBullet + sensors)
+├── train.py                # PPO training script with callbacks
+├── evaluate.py             # Model evaluation and results visualization
+├── test_environment.py     # Environment verification tests
+├── debug_spawn.py          # Spawn position and track boundary debugger
+├── requirements.txt        # Python dependencies
+├── log.md                  # Reward function iteration history
+├── setup/
+│   ├── track (3).py        # Procedural track generation
+│   ├── controls (1).py     # Tank-drive car physics controller
+│   ├── track_config (1).yaml  # Track, physics, and camera config
+│   └── car (1).urdf        # Car model for PyBullet
+└── models/                 # Saved models (generated during training)
 ```
 
-**On Linux/Mac:**
+## Setup
+
+### 1. Create a virtual environment
+
 ```bash
-python3 -m venv venv
+python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# Linux / macOS
 source venv/bin/activate
 ```
 
-### 2. Install Dependencies
-
-Once your virtual environment is activated, install the required packages:
+### 2. Install dependencies
 
 ```bash
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 3. Verify Installation
-
-You can verify that everything is installed correctly by running:
+### 3. Verify installation
 
 ```bash
-python -c "import stable_baselines3; import gymnasium; print('Installation successful!')"
+python -c "import stable_baselines3; import gymnasium; import pybullet; print('OK')"
 ```
 
-## Project Structure
+## Usage
 
-```
-sb3ppotemplate/
-├── requirements.txt          # Python dependencies
-├── README.md                # This file
-├── environment.py           # Custom self-driving car environment (to be implemented)
-├── train.py                 # Training script (to be implemented)
-├── evaluate.py              # Evaluation script (to be implemented)
-├── test_environment.py      # Test script to verify environment works
-├── setup/                   # Pre-built components
-│   ├── track (3).py        # Track generation class
-│   ├── controls (1).py     # Car physics controller
-│   ├── track_config (1).yaml # Configuration file
-│   └── car (1).urdf        # Car model file
-└── models/                  # Directory for saved models
+### Test the environment
+
+```bash
+python test_environment.py
 ```
 
-## Learning Approach
+### Train the agent
 
-The code uses a **Socratic method** approach - instead of giving you the answers, it asks questions to guide your thinking:
-- **Why** questions help you understand the reasoning behind design choices
-- **What** questions help you identify what needs to be implemented
-- **How** questions guide you through the implementation process
+```bash
+python train.py
+```
 
-Each file contains:
-- `TODO` comments marking places where you need to fill in code
-- Socratic questions prompting you to think about design decisions
-- Hints and explanations of key concepts
-- Placeholder code showing the expected structure
+Training progress can be monitored with TensorBoard:
 
-## Next Steps
+```bash
+tensorboard --logdir=logs/
+```
 
-1. **Implement the environment** (`environment.py`):
-   - Define observation and action spaces
-   - Implement reward function
-   - Set up termination/truncation conditions
-   - Integrate with PyBullet and the setup components
+### Evaluate a trained model
 
-2. **Test your environment** (`test_environment.py`):
-   - Run `python test_environment.py` to verify your implementation
-   - Fix any issues before proceeding to training
-   - This helps catch bugs early!
+```bash
+python evaluate.py --model models/best_model/best_model --episodes 10
+```
 
-3. **Set up training** (`train.py`):
-   - Configure PPO hyperparameters
-   - Set up callbacks for evaluation and checkpointing
-   - Start training and monitor progress
+Add `--render` to open a PyBullet GUI window during evaluation.
 
-4. **Create evaluation** (`evaluate.py`):
-   - Load trained models
-   - Run evaluation episodes
-   - Visualize and analyze results
+## Reward Design
 
-5. **Experiment**:
-   - Try different hyperparameters
-   - Modify reward functions
-   - Adjust observation spaces
-   - Compare different training configurations
+The reward function went through 8 iterations (documented in `log.md`). The final version uses angular progress around the track as the primary signal, with a small centering bonus to keep the car away from walls and a penalty for leaving the track.
 
-## Resources
+| Component         | Value             |
+|-------------------|-------------------|
+| Angular progress  | +50 * delta_angle |
+| Centering bonus   | up to +0.1        |
+| Off-track penalty | -10               |
+
+## Hyperparameters
+
+| Parameter       | Value  |
+|-----------------|--------|
+| Learning rate   | 3e-4   |
+| Rollout steps   | 4096   |
+| Batch size      | 128    |
+| Epochs per update | 10   |
+| Gamma           | 0.995  |
+| GAE lambda      | 0.95   |
+| Clip range      | 0.2    |
+| Entropy coeff   | 0.02   |
+| Network         | MLP [128, 128] |
+| Total timesteps | 200,000 |
+
+## Results
+
+After training, the best model achieves a consistent reward of ~2847 per episode, running the full 3000 steps without leaving the track.
+
+## References
 
 - [Stable-Baselines3 Documentation](https://stable-baselines3.readthedocs.io/)
 - [Gymnasium Documentation](https://gymnasium.farama.org/)
-- [PPO Algorithm Paper](https://arxiv.org/abs/1707.06347)
-
-## Notes
-
-- Make sure to activate your virtual environment before running any scripts
-- Models will be saved in the `models/` directory
-- Adjust hyperparameters in the training script to experiment with different configurations
-
+- [PPO Paper (Schulman et al., 2017)](https://arxiv.org/abs/1707.06347)
